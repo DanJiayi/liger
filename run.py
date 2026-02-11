@@ -40,8 +40,9 @@ class set_dir:
             )
 
         self.embedding_save_name = f"_{config['dataset']['content_model']}"
+        embedding_suffix = config["dataset"].get("embedding_suffix", "")  # e.g. "_new" for _embeddings_new.pt
         self.embedding_save_path = os.path.join(
-            self.directory_processed, id_filename + "_embeddings.pt"
+            self.directory_processed, id_filename + "_embeddings" + embedding_suffix + ".pt"
         )
 
         self.result_save_dir = f"./results/{config['test_method']}/"

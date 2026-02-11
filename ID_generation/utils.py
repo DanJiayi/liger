@@ -36,8 +36,11 @@ def process_embeddings(
         content_model = config["dataset"]["content_model"]
         if "sentence-t5" in content_model:
             with torch.no_grad():
+                # text_embedding_model = SentenceTransformer(
+                #     f"sentence-transformers/{content_model}", device=device
+                # )
                 text_embedding_model = SentenceTransformer(
-                    f"sentence-transformers/{content_model}", device=device
+                    f"/root/test/sentence-t5-base", device=device
                 )
                 sorted_text = [value for key, value in sorted(item_id_2_text.items())]
             bs = 512 if content_model == "sentence-t5-base" else 4

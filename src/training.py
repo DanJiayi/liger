@@ -43,8 +43,8 @@ def evaluate_helper(
     item_embedding,
     method_config,
     keyword="eval",
-    KEYS=[10],  # recall@k, k list
-    RETRIEVE_KEY=[20, 40, 60, 80, 100],  # retrieve then rank
+    KEYS=[5,10],  # recall@k, k list
+    RETRIEVE_KEY=[20],  # retrieve then rank , 40, 60, 80, 100
 ):
     """
     :param KEYS: the keys for the recall@k
@@ -208,12 +208,19 @@ def train_epoch(
     item2sid,
     item_embedding,
 ):
-    progress_bar = tqdm(range(len(train_dataloader)))
+    # progress_bar = tqdm(range(len(train_dataloader)))
+    progress_bar = tqdm(
+    train_dataloader,
+    desc=f"Epoch {epoch + 1}",
+    leave=True,
+    ncols=100,
+)
     model.train()
     all_ids = np.arange(item2sid.shape[0]) + 1
     unseen_ids = np.setdiff1d(all_ids, seen_ids)
 
-    for batch in train_dataloader:
+    # for batch in train_dataloader:
+    for batch in progress_bar:
         optimizer.zero_grad()
 
         outputs, _ = model_forward(
@@ -255,6 +262,11 @@ def train_epoch(
 
         if scheduler is not None:
             scheduler.step()
+
+        progress_bar.set_postfix(
+        loss=f"{loss.item():.4f}",
+        lr=f"{get_lr(optimizer):.2e}",
+        )
 
     progress_bar.close()
 
@@ -452,10 +464,10 @@ def train_tiger(
         and method_config["sid_loss_weight"] > 0
     ):
         # then this is the liger method
-        RETRIEVE_KEY = [20, 40, 60, 80, 100]
+        RETRIEVE_KEY = [20] #, 40, 60, 80, 100
     else:
         # then this could be TIGER or dense method only
-        RETRIEVE_KEY = [10]
+        RETRIEVE_KEY = [5,10]
 
     best_ndcg_10 = -0.01
     global_step = 0

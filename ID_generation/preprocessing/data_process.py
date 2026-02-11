@@ -778,4 +778,12 @@ def preprocessing_each_dataset(config, dataset_name):
     with open(item2attributes_file, "w") as out:
         out.write(json_str)
 
+    # 保存 id2item 供 embedding 转换等使用
+    id2item_file = os.path.join(
+        processed_data_path, f"{dataset_name}_id2item.json"
+    )
+    json_str = json.dumps(datamaps["id2item"])
+    with open(id2item_file, "w") as out:
+        out.write(json_str)
+
     return data_file, id2meta_file, item2attributes_file
