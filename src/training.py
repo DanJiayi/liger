@@ -614,17 +614,15 @@ def train_tiger(
             num_training_steps=total_steps,
         )
 
-    # When CSA is enabled we skip loading old checkpoints to avoid
-    # incompatibilities with previously saved states that do not
-    # contain CSA parameters. This keeps the original behavior
-    # unchanged for the default path (no CSA).
-    if os.path.exists(state_path) and not use_csa:
+    if os.path.exists(state_path): # and not use_csa:
         training_state = torch.load(
             state_path, map_location=device, weights_only=False
         )  # NOTE: change to cpu if OOM
         state_dict = training_state["model_state_dict"]
         model.load_state_dict(state_dict, strict=True)
         optimizer.load_state_dict(training_state["optimizer_state_dict"])
+        if csa_module is not None and "csa_state_dict" in training_state:
+            csa_module.load_state_dict(training_state["csa_state_dict"], strict=True)
         best_ndcg_10 = training_state["best_ndcg_10"]
         global_step = training_state["global_step"]
         best_epoch = training_state["best_epoch"]
@@ -695,6 +693,8 @@ def train_tiger(
                 "global_step": global_step,
                 "best_epoch": best_epoch,
             }
+            if csa_module is not None:
+                training_state["csa_state_dict"] = csa_module.state_dict()
             torch.save(training_state, state_path)
 
         if (

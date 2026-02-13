@@ -88,5 +88,29 @@ python run.py \
     device_id=0 \
     method=setting \
     test_method=liger \
-    experiment_id="liger_Beauty_csa_0213" \
+    experiment_id="liger_Beauty_csa_10" \
     +use_csa=True
+
+python run.py \
+    dataset=amazon \
+    dataset.name=Toys_and_Games \
+    +dataset.embedding_suffix="_new" \
+    +dataset.embedding_file_model=sentence-t5-base \
+    seed=42 \
+    device_id=0 \
+    method=setting \
+    test_method=liger \
+    experiment_id="liger_Toys_and_Games_csa_10" \
+    +use_csa=True
+
+
+python run.py \
+    dataset=amazon \
+    dataset.name=Beauty \
+    method=setting \
+    test_method=liger \
+    +use_csa=True \
+    method.csa_contrastive_alpha=0.2 \
+    method.csa_manifold_beta=0.2 \
+    method.csa_manifold_c=0.2 \
+    experiment_id="liger_Beauty_csa_222"
