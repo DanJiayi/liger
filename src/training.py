@@ -21,6 +21,7 @@ from transformers.optimization import get_scheduler
 
 from utils import CustomDataset, get_lr, setup_logging
 
+from .csa_module import CSAModule
 from .evaluation import (
     evaluate,
     evaluate_dense_ids,
@@ -207,6 +208,8 @@ def train_epoch(
     method_config,
     item2sid,
     item_embedding,
+    max_items_per_seq,
+    csa_module=None,
 ):
     # progress_bar = tqdm(range(len(train_dataloader)))
     progress_bar = tqdm(
@@ -231,7 +234,7 @@ def train_epoch(
             method_config,
         )
 
-        # Calculating the loss
+        # Calculating the base TIGER / LIGER loss
         loss = 0
         hard_loss = outputs.loss
         loss += hard_loss * method_config["sid_loss_weight"]
@@ -253,6 +256,79 @@ def train_epoch(
             logits[:, unseen_ids - 1] = -100
             embedding_loss = F.cross_entropy(logits, logits_label)
         loss += embedding_loss * method_config["embedding_loss_weight"]
+
+        # ================= Optional CSA module =================
+        # When enabled, we aggregate the code sequence embeddings into
+        # item-level ID embeddings using learnable weights (stored in
+        # CSAModule.code_weights), then compute the CSA losses and add
+        # them to the main loss. The default path (no CSA) is kept
+        # identical to the original implementation.
+        csa_total_loss = 0.0
+        if csa_module is not None and method_config["use_id"] == "sid":
+            # input_sids: [B, seq_len]
+            input_sids = batch["input_sids"].to(device)
+
+            # Code tokens start after the (optional) user id.
+            item_idx_start = 1 if method_config["include_user_id"] else 0
+            seq_len = input_sids.size(1)
+
+            if (
+                csa_module.n_codebook is not None
+                and item_idx_start + csa_module.n_codebook * max_items_per_seq <= seq_len
+            ):
+                # Obtain raw code-level token embeddings from the shared
+                # embedding matrix: [B, seq_len, D]
+                token_embeds = model.shared(input_sids)
+
+                # Slice out the region that corresponds to item semantic IDs
+                # and reshape to [B, max_items_per_seq, n_codebook, D].
+                code_region = token_embeds[
+                    :,
+                    item_idx_start : item_idx_start
+                    + csa_module.n_codebook * max_items_per_seq,
+                    :,
+                ]
+                B, _, D = code_region.shape
+                code_region = code_region.view(
+                    B, max_items_per_seq, csa_module.n_codebook, D
+                )
+
+                # Learnable weights over code positions, following the CSA
+                # implementation in the generative retrieval repo.
+                weights = torch.softmax(
+                    csa_module.code_weights.to(code_region.device)
+                    / csa_module.code_weight_tau,
+                    dim=0,
+                )  # [L]
+                id_embeddings = (code_region * weights.view(1, 1, -1, 1)).sum(
+                    dim=2
+                )  # [B, max_items_per_seq, D]
+
+                # Build a batch view for CSA: we align item_ids with the
+                # aggregated item-level embeddings (length = max_items_per_seq).
+                batch_for_csa = dict(batch)
+                full_input_ids = batch_for_csa["input_ids"].to(device)
+                if method_config["include_user_id"]:
+                    # Skip the user-id position when present.
+                    item_ids = full_input_ids[:, 1 : 1 + max_items_per_seq]
+                else:
+                    item_ids = full_input_ids[:, :max_items_per_seq]
+                # If for any reason the sequence is shorter, pad with zeros.
+                if item_ids.size(1) < max_items_per_seq:
+                    pad_cols = max_items_per_seq - item_ids.size(1)
+                    pad = torch.zeros(
+                        item_ids.size(0),
+                        pad_cols,
+                        dtype=item_ids.dtype,
+                        device=item_ids.device,
+                    )
+                    item_ids = torch.cat([item_ids, pad], dim=1)
+
+                batch_for_csa["input_ids"] = item_ids
+
+                _, csa_losses = csa_module(id_embeddings, batch_for_csa)
+                csa_total_loss = csa_losses.get("total", 0.0)
+                loss = loss + csa_total_loss
 
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
@@ -278,6 +354,10 @@ def train_epoch(
     }
     logs["train/sid_loss"] = hard_loss
     logs["train/embedding_loss"] = embedding_loss
+    if csa_module is not None:
+        logs["train/csa_loss"] = (
+            csa_total_loss if isinstance(csa_total_loss, torch.Tensor) else 0.0
+        )
 
     writer.log(logs)
 
@@ -293,6 +373,7 @@ def train_tiger(
     item_embedding,
     id_save_location,
     device,
+    use_csa=False,
 ):
 
     output_path = config["output_path"]
@@ -408,6 +489,36 @@ def train_tiger(
         embedding_head_dict=method_config["embedding_head_dict"],
     ).to(device)
 
+    # Optional CSA module (disabled by default). We only instantiate it
+    # when explicitly requested via the `use_csa` flag from run.py
+    # (e.g., `python run.py --use_csa=True`). This guarantees that the
+    # original behavior is unchanged when `use_csa=False`.
+    csa_module = None
+    if use_csa and method_config["use_id"] == "sid":
+        # Pad item-level text embeddings with a zero row at index 0 so
+        # that padding / user-id positions can safely map to 0.
+        with torch.no_grad():
+            if item_embedding.device != torch.device("cpu"):
+                text_embeddings_cpu = item_embedding.detach().cpu()
+            else:
+                text_embeddings_cpu = item_embedding
+            pad_row = torch.zeros(
+                1, text_embeddings_cpu.size(1), dtype=text_embeddings_cpu.dtype
+            )
+            text_embeddings_with_pad = torch.cat([pad_row, text_embeddings_cpu], dim=0)
+
+        csa_module = CSAModule(
+            hidden_dim=t5_config["d_model"],
+            text_embeddings=text_embeddings_with_pad,
+            dataset=orig_config["dataset"]["name"],
+            contrastive_alpha=method_config.get("csa_contrastive_alpha", 0.5),
+            contrastive_tau=method_config.get("csa_contrastive_tau", 0.07),
+            manifold_beta=method_config.get("csa_manifold_beta", 0.2),
+            manifold_c=method_config.get("csa_manifold_c", 0.2),
+            n_codebook=n_codebook,
+            code_weight_tau=method_config.get("code_weight_tau", 1.0),
+        ).to(device)
+
     total_steps = trainer_config["steps"]
     batch_size = trainer_config["batch_size"]
     eval_batch_size = trainer_config["eval_batch_size"]
@@ -476,8 +587,13 @@ def train_tiger(
     state_path = output_path + "/ckpt.pt"
     best_state_path = output_path + "/results/ckpt_best.pt"
 
+    if csa_module is not None:
+        optimizer_params = list(model.parameters()) + list(csa_module.parameters())
+    else:
+        optimizer_params = model.parameters()
+
     optimizer = AdamW(
-        model.parameters(),
+        optimizer_params,
         lr=trainer_config["lr"],
         weight_decay=trainer_config["weight_decay"],
     )
@@ -498,7 +614,11 @@ def train_tiger(
             num_training_steps=total_steps,
         )
 
-    if os.path.exists(state_path):
+    # When CSA is enabled we skip loading old checkpoints to avoid
+    # incompatibilities with previously saved states that do not
+    # contain CSA parameters. This keeps the original behavior
+    # unchanged for the default path (no CSA).
+    if os.path.exists(state_path) and not use_csa:
         training_state = torch.load(
             state_path, map_location=device, weights_only=False
         )  # NOTE: change to cpu if OOM
@@ -536,6 +656,8 @@ def train_tiger(
             method_config,
             item2sid,
             item_embedding,
+            max_items_per_seq,
+            csa_module=csa_module,
         )
         global_step += len(train_dataloader)
 

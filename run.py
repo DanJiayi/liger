@@ -115,6 +115,12 @@ def main(config: DictConfig) -> None:
             config, device, item_embedding, id_split, PATH_CONFIG.id_save_location
         )
 
+        # Optional CSA module switch. We keep the default behavior (no CSA)
+        # to ensure existing scripts such as scripts/ours.sh produce
+        # identical results unless the user explicitly enables CSA via
+        # `--use_csa=True`.
+        use_csa = config.get("use_csa", False)
+
         train_tiger(
             config,
             train_config,
@@ -124,6 +130,7 @@ def main(config: DictConfig) -> None:
             item_embedding,
             PATH_CONFIG.id_save_location,
             device=device,
+            use_csa=use_csa,
         )
 
     except BaseException:

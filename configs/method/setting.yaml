@@ -7,6 +7,11 @@ flag_use_output_embedding: True
 
 embedding_loss_weight: 1
 sid_loss_weight: 1
+csa_contrastive_alpha: 0.1
+csa_contrastive_tau: 0.1
+csa_manifold_beta: 0.1
+csa_manifold_c: 0.2
+code_weight_tau: 1.0
 
 evaluation_method: "dense"
 

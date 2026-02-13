@@ -18,15 +18,22 @@ class CSAModule(nn.Module):
         contrastive_tau=0.07,
         manifold_beta=0.2,
         manifold_c=0.2,
+        n_codebook=None,
+        code_weight_tau=1.0,
     ):
         super().__init__()
 
         self.hidden_dim = hidden_dim
+        # `text_embeddings` is item-level text embedding, typically of
+        # dimension different from `hidden_dim` (e.g., 768 vs T5 d_model).
+        # We record its original dimension and project it to `hidden_dim`
+        # inside `text_mlp`.
         self.text_embeddings = text_embeddings
+        self.text_dim = text_embeddings.shape[1]
         self.dataset = dataset
 
         # fusion
-        self.text_mlp = nn.Linear(hidden_dim, hidden_dim)
+        self.text_mlp = nn.Linear(self.text_dim, hidden_dim)
         self.gate = nn.Linear(hidden_dim * 2, hidden_dim)
 
         # contrastive
@@ -38,6 +45,15 @@ class CSAModule(nn.Module):
         self.manifold_c = manifold_c
         self.proj_phi = nn.Linear(hidden_dim, hidden_dim)
         self.proj_psi = nn.Linear(hidden_dim, hidden_dim)
+
+        # Optional learnable weights for aggregating code-level embeddings
+        # into item-level ID embeddings (length = number of semantic codes).
+        self.n_codebook = n_codebook
+        self.code_weight_tau = code_weight_tau
+        if n_codebook is not None:
+            self.code_weights = nn.Parameter(torch.zeros(n_codebook))
+        else:
+            self.code_weights = None
 
         self._text_embeddings_device_cache = {}
 
