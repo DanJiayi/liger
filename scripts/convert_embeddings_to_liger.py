@@ -6,6 +6,11 @@ Uses emb3 by default. Outputs _embeddings_new.pt.
 Uses only embeddings.json. Runs liger preprocessing if id2meta/id2item are missing,
 skips if they already exist.
 
+IMPORTANT: When using run.py with +dataset.embedding_suffix=_new, pass
++dataset.embedding_file_model=sentence-t5-base so run.py looks for this file.
+Then --output must match: {processed_path}/{dataset_name}_{embedding_file_model}_embeddings_new.pt
+Example: ./ID_generation/preprocessing/processed/Beauty_sentence-t5-base_embeddings_new.pt
+
 Usage:
   python scripts/convert_embeddings_to_liger.py \
     --embeddings /path/to/embeddings.json \

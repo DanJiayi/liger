@@ -29,19 +29,18 @@ def process_embeddings(
         item_id_2_text[int(k)] = v
 
     if os.path.exists(embedding_save_path):
+        # Load precomputed embeddings (may be saved on CPU); move to current device
         item_embedding = torch.load(embedding_save_path, weights_only=False)
-
+        if isinstance(item_embedding, torch.Tensor):
+            item_embedding = item_embedding.to(device)
     else:
         print("Embeddings not found, generating embeddings...")
         content_model = config["dataset"]["content_model"]
         if "sentence-t5" in content_model:
             with torch.no_grad():
-                # text_embedding_model = SentenceTransformer(
-                #     f"sentence-transformers/{content_model}", device=device
-                # )
-                text_embedding_model = SentenceTransformer(
-                    f"/root/test/sentence-t5-base", device=device
-                )
+                # Use HuggingFace id so model is downloaded if not cached
+                model_path = config["dataset"].get("embedding_model_path") or f"sentence-transformers/{content_model}"
+                text_embedding_model = SentenceTransformer(model_path, device=device)
                 sorted_text = [value for key, value in sorted(item_id_2_text.items())]
             bs = 512 if content_model == "sentence-t5-base" else 4
             # embedding is generated based on the sorted text

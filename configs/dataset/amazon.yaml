@@ -44,7 +44,7 @@ TIGER:
     initializer_factor: 0.02
 
   trainer:
-    steps: 100000
+    steps: 50000
     lr: 0.0003
     patience: 50
     scheduler: "cosine"

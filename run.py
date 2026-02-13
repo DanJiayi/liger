@@ -41,8 +41,11 @@ class set_dir:
 
         self.embedding_save_name = f"_{config['dataset']['content_model']}"
         embedding_suffix = config["dataset"].get("embedding_suffix", "")  # e.g. "_new" for _embeddings_new.pt
+        # When using converted embeddings, filename may use a different model name (e.g. sentence-t5-base)
+        embedding_file_model = config["dataset"].get("embedding_file_model") or config["dataset"]["content_model"]
+        embedding_filename = f"{config['dataset']['name']}_{embedding_file_model}"
         self.embedding_save_path = os.path.join(
-            self.directory_processed, id_filename + "_embeddings" + embedding_suffix + ".pt"
+            self.directory_processed, embedding_filename + "_embeddings" + embedding_suffix + ".pt"
         )
 
         self.result_save_dir = f"./results/{config['test_method']}/"
