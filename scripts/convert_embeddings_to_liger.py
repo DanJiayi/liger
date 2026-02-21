@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Convert embeddings.json (format: item_id: [emb1, emb2, emb3]) to liger RQ-VAE format.
-Uses emb3 by default. Outputs _embeddings_new.pt.
+Uses emb3(fused embedding) by default. Outputs _embeddings_new.pt.
 
 Uses only embeddings.json. Runs liger preprocessing if id2meta/id2item are missing,
 skips if they already exist.

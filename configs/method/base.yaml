@@ -15,3 +15,6 @@ embedding_head_dict:
   embed_target: ground_truth
   embed_proj_type: mlp
 
+csa_contrastive_alpha: 0.1
+csa_manifold_beta: 0.1
+csa_manifold_c: 0.2

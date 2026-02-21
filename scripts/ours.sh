@@ -103,6 +103,18 @@ python run.py \
     experiment_id="liger_Toys_and_Games_csa_10" \
     +use_csa=True
 
+python run.py \
+    dataset=amazon \
+    dataset.name=Sports_and_Outdoors \
+    +dataset.embedding_suffix="_new" \
+    +dataset.embedding_file_model=sentence-t5-base \
+    seed=42 \
+    device_id=0 \
+    method=setting \
+    test_method=liger \
+    experiment_id="liger_Sports_and_Outdoors_csa_10" \
+    +use_csa=True
+
 
 python run.py \
     dataset=amazon \
